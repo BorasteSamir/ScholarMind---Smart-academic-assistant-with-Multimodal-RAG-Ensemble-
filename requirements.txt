@@ -1,0 +1,26 @@
+flake8
+mypy
+python-dotenv
+pytest
+# Web / App
+streamlit
+# PDF Processing
+PyMuPDF
+pdfplumber
+# Computer Vision / Deep Learning
+Pillow
+torch
+torchvision
+transformers
+# Embeddings & Vector DB
+sentence-transformers
+chromadb
+diskcache
+# LLM APIs
+openai
+anthropic
+groq
+requests
+tiktoken
+# Evaluation
+rouge-score
