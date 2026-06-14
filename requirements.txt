@@ -22,5 +22,12 @@ anthropic
 groq
 requests
 tiktoken
+# LangChain + LangGraph (core engine)
+langchain
+langchain-core
+langchain-groq
+langchain-openai
+langchain-anthropic
+langgraph
 # Evaluation
 rouge-score

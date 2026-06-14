@@ -1,17 +1,15 @@
 """
 agents/agent_router.py
 =======================
-Intent-based agent router.
+Intent-based agent router — now delegates generation to the LangGraph
+graph in graph.py, while keeping the identical public interface that
+app.py depends on.
 
-Analyzes the user's input and routes it to the most appropriate agent:
-  - QAAgent           → factual questions (What, Who, When, How many...)
-  - SummarizationAgent → summarization requests
-  - ExplanationAgent  → "explain", "define", "what is", "simplify"
-  - FormulaAgent      → formula/equation/math-related queries
-  - DiagramAgent      → figure/diagram/image-related queries
-
-Routing uses keyword heuristics (fast, zero-LLM-cost) as the primary
-mechanism, with a confidence score. If intent is ambiguous, defaults to QA.
+Public API (unchanged):
+  - detect_intent(text) → IntentResult
+  - AgentRouter.route(query, doc_id, force_intent) → (GenerationResult, IntentResult)
+  - AgentRouter.get_agent(intent) → BaseAgent
+  - get_router() → singleton AgentRouter
 """
 
 import logging
@@ -31,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 # ─────────────────────────────────────────────
-# INTENT DEFINITIONS
+# INTENT DETECTION  (unchanged — zero LLM cost)
 # ─────────────────────────────────────────────
 
 INTENT_PATTERNS: dict[str, list[str]] = {
@@ -60,7 +58,7 @@ INTENT_PATTERNS: dict[str, list[str]] = {
         r"\bequation\b",
         r"\bmath(ematics|ematical)?\b",
         r"\blatex\b",
-        r"[\$\\]",                        # LaTeX delimiters
+        r"[\$\\]",
         r"\b(sum|integral|derivative|gradient|matrix|vector|eigenvalue)\b",
         r"\b(alpha|beta|gamma|delta|theta|sigma|lambda|epsilon|mu|pi)\b",
         r"\b(log|exp|sin|cos|tan|norm|loss|function)\s*\(",
@@ -75,57 +73,39 @@ INTENT_PATTERNS: dict[str, list[str]] = {
     ],
     "qa": [
         r"\b(what|who|when|where|which|how|why|did|does|is|are|was|were|can|could|should)\b",
-        r"\?",                            # any question
+        r"\?",
     ],
 }
 
-# Compile all patterns
 _COMPILED_PATTERNS = {
     intent: [re.compile(p, re.IGNORECASE) for p in patterns]
     for intent, patterns in INTENT_PATTERNS.items()
 }
 
 
-# ─────────────────────────────────────────────
-# INTENT DETECTION
-# ─────────────────────────────────────────────
-
 @dataclass
 class IntentResult:
     intent: str
-    confidence: float          # 0.0 – 1.0
+    confidence: float
     matched_patterns: list[str]
 
 
 def detect_intent(text: str) -> IntentResult:
-    """
-    Keyword-pattern intent detection.
-
-    Priority order: summarize > formula > diagram > explain > qa
-    Returns the top-matching intent and a confidence score.
-    """
     priority_order = ["summarize", "formula", "diagram", "explain", "qa"]
     scores: dict[str, int] = {}
     matched: dict[str, list[str]] = {}
 
     for intent in priority_order:
-        patterns = _COMPILED_PATTERNS[intent]
-        hits = [p.pattern for p in patterns if p.search(text)]
+        hits = [p.pattern for p in _COMPILED_PATTERNS[intent] if p.search(text)]
         scores[intent] = len(hits)
         matched[intent] = hits
 
-    # Select by priority (first non-zero in priority order)
     for intent in priority_order:
         if scores[intent] > 0:
-            # Normalize confidence: max 5 hits = 1.0
             conf = min(scores[intent] / 5.0, 1.0)
-            return IntentResult(
-                intent=intent,
-                confidence=conf,
-                matched_patterns=matched[intent],
-            )
+            return IntentResult(intent=intent, confidence=conf,
+                                matched_patterns=matched[intent])
 
-    # Default: QA
     return IntentResult(intent="qa", confidence=0.3, matched_patterns=[])
 
 
@@ -135,21 +115,20 @@ def detect_intent(text: str) -> IntentResult:
 
 class AgentRouter:
     """
-    Routes user queries to the appropriate specialized agent.
+    Routes queries to specialized agents.
 
-    Usage:
-        router = AgentRouter()
-        result = router.route("Summarize the paper", doc_id="attention_all_you_need")
-        print(result.answer)
+    .route() now delegates to the LangGraph pipeline in graph.py via
+    RAGGenerator, while still exposing the same (GenerationResult, IntentResult)
+    return type that app.py expects.
+
+    .get_agent() still returns the original BaseAgent subclasses so that
+    app.py's direct agent calls (summary tab, assets tab) are unaffected.
     """
 
     def __init__(self):
-        # Agents are built lazily on first use to avoid loading
-        # the LLM client and generator at import / startup time.
         self._agents: dict[str, BaseAgent] = {}
 
     def _get_agents(self) -> dict[str, BaseAgent]:
-        """Build agents on first access (lazy init)."""
         if not self._agents:
             generator = get_generator()
             self._agents = {
@@ -169,26 +148,22 @@ class AgentRouter:
         **kwargs,
     ) -> tuple[GenerationResult, IntentResult]:
         """
-        Detect intent and run the appropriate agent.
+        Detect intent → run the corresponding agent (which internally
+        calls RAGGenerator → LangGraph).
 
-        Args:
-            query:        User input string
-            doc_id:       Document filter for retrieval
-            force_intent: Override auto-detection (e.g., "formula")
-            **kwargs:     Forwarded to the selected agent
-
-        Returns:
-            (GenerationResult, IntentResult)
+        Returns (GenerationResult, IntentResult) — identical to before.
         """
         agents = self._get_agents()
+
         if force_intent and force_intent in agents:
-            intent = IntentResult(intent=force_intent, confidence=1.0, matched_patterns=[])
+            intent = IntentResult(intent=force_intent, confidence=1.0,
+                                  matched_patterns=[])
         else:
             intent = detect_intent(query)
 
         agent = agents[intent.intent]
         logger.info(
-            f"[Router] Intent='{intent.intent}' "
+            f"[Router] intent='{intent.intent}' "
             f"(conf={intent.confidence:.2f}) → {agent.agent_name}"
         )
 
@@ -196,23 +171,20 @@ class AgentRouter:
         return result, intent
 
     def get_agent(self, intent: str) -> Optional[BaseAgent]:
-        """Return a specific agent by intent name."""
         return self._get_agents().get(intent)
 
     def available_intents(self) -> list[str]:
-        """Return list of supported intent names."""
         return list(self._get_agents().keys())
 
 
 # ─────────────────────────────────────────────
-# MODULE-LEVEL SINGLETON
+# SINGLETON
 # ─────────────────────────────────────────────
 
 _default_router: Optional[AgentRouter] = None
 
 
 def get_router() -> AgentRouter:
-    """Return the module-level singleton AgentRouter."""
     global _default_router
     if _default_router is None:
         _default_router = AgentRouter()
