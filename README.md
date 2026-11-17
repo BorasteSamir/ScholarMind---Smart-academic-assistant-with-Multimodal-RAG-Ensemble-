@@ -1,4 +1,17 @@
-# 🎓 Smart Academic Assistant (Multimodal RAG + Ensemble LLM)
+# 🎓 ScholarMind — Smart Academic Assistant (Multimodal RAG + Ensemble LLM)
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white"/>
+  <img src="https://img.shields.io/badge/PyTorch-2.0+-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white"/>
+  <img src="https://img.shields.io/badge/RAG-Multimodal-9C27B0?style=for-the-badge"/>
+  <img src="https://img.shields.io/badge/ChromaDB-Vector_Store-00C49F?style=for-the-badge"/>
+  <img src="https://img.shields.io/badge/Groq-LLaMA--3.3_Ensemble-F55036?style=for-the-badge"/>
+  <img src="https://img.shields.io/badge/Streamlit-UI-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white"/>
+</p>
+
+<p align="center">
+  <img src="docs/assets/smart_academic_assistant_ui.png" alt="ScholarMind Interface" width="85%" />
+</p>
 
 A production-grade **Multimodal Retrieval-Augmented Generation (RAG)** system specialized for academic documents, powered by a **5-model ensemble** via Groq API.
 
@@ -44,6 +57,14 @@ Four independent heuristic checks on every generated answer:
 - Numeric consistency (unsupported numbers flagged)
 - Named entity verification (unsupported proper nouns flagged)
 - Overconfident phrasing detection
+
+---
+
+## System Architecture
+
+<p align="center">
+  <img src="docs/assets/system_architecture.png" alt="System Architecture Diagram" width="90%" />
+</p>
 
 ---
 
@@ -120,8 +141,8 @@ smart_academic_assistant/
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/<your-username>/smart-academic-assistant.git
-cd smart-academic-assistant
+git clone https://github.com/BorasteSamir/ScholarMind---Smart-academic-assistant-with-Multimodal-RAG-Ensemble-.git
+cd ScholarMind---Smart-academic-assistant-with-Multimodal-RAG-Ensemble-
 ```
 
 ### 2. Create a virtual environment (Python 3.10+)
